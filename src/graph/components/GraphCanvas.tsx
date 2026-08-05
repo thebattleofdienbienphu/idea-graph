@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ReactFlow, Background, Controls, useReactFlow } from '@xyflow/react';
 import { useGraph } from '../providers/GraphProvider';
+import { NodeCallbackContext } from '../providers/NodeCallbackContext';
+import IdeaNode from './IdeaNode';
 import '@xyflow/react/dist/style.css';
+
+const nodeTypes = {
+  default: IdeaNode,
+};
 
 export default function GraphCanvas({
   onNodeClick,
@@ -13,6 +19,7 @@ export default function GraphCanvas({
   onNodesDelete,
   onEdgesDelete,
   onSelectionChange,
+  onNodeUpdate,
 }: {
   onNodeClick?: (nodeId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
@@ -23,6 +30,7 @@ export default function GraphCanvas({
   onNodesDelete?: (nodeIds: string[]) => void;
   onEdgesDelete?: (edgeIds: string[]) => void;
   onSelectionChange?: (selectedNodes: string[], selectedEdges: string[]) => void;
+  onNodeUpdate?: (nodeId: string, fields: { label?: string; content?: string }) => void;
 }): React.JSX.Element {
   const { nodes, edges, onNodesChange, onEdgesChange } = useGraph();
   const { screenToFlowPosition } = useReactFlow();
@@ -43,30 +51,37 @@ export default function GraphCanvas({
     }
   };
 
+  const callbackContextValue = useMemo(() => ({
+    onNodeUpdate: onNodeUpdate ?? (() => {}),
+  }), [onNodeUpdate]);
+
   return (
-    <div
-      style={{ width: '100%', height: '100%', minHeight: '500px' }}
-      onDoubleClick={handleDoubleClick}
-    >
-      <ReactFlow
-        className="dark"
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick ? (_, node) => onNodeClick(node.id) : undefined}
-        onEdgeClick={onEdgeClick ? (_, edge) => onEdgeClick(edge.id) : undefined}
-        onPaneClick={onPaneClick}
-        onNodeDragStop={onNodeDragStop ? (_, node) => onNodeDragStop(node.id, node.position) : undefined}
-        onConnect={onConnect ? (conn) => onConnect(conn.source, conn.target) : undefined}
-        onNodesDelete={onNodesDelete ? (deleted) => onNodesDelete(deleted.map((n) => n.id)) : undefined}
-        onEdgesDelete={onEdgesDelete ? (deleted) => onEdgesDelete(deleted.map((e) => e.id)) : undefined}
-        onSelectionChange={onSelectionChange ? ({ nodes: selNodes, edges: selEdges }) => onSelectionChange(selNodes.map((n) => n.id), selEdges.map((e) => e.id)) : undefined}
-        zoomOnDoubleClick={false}
+    <NodeCallbackContext.Provider value={callbackContextValue}>
+      <div
+        style={{ width: '100%', height: '100%', minHeight: '500px' }}
+        onDoubleClick={handleDoubleClick}
       >
-        <Background />
-        <Controls />
-      </ReactFlow>
-    </div>
+        <ReactFlow
+          className="dark"
+          nodeTypes={nodeTypes}
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick ? (_, node) => onNodeClick(node.id) : undefined}
+          onEdgeClick={onEdgeClick ? (_, edge) => onEdgeClick(edge.id) : undefined}
+          onPaneClick={onPaneClick}
+          onNodeDragStop={onNodeDragStop ? (_, node) => onNodeDragStop(node.id, node.position) : undefined}
+          onConnect={onConnect ? (conn) => onConnect(conn.source, conn.target) : undefined}
+          onNodesDelete={onNodesDelete ? (deleted) => onNodesDelete(deleted.map((n) => n.id)) : undefined}
+          onEdgesDelete={onEdgesDelete ? (deleted) => onEdgesDelete(deleted.map((e) => e.id)) : undefined}
+          onSelectionChange={onSelectionChange ? ({ nodes: selNodes, edges: selEdges }) => onSelectionChange(selNodes.map((n) => n.id), selEdges.map((e) => e.id)) : undefined}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
+      </div>
+    </NodeCallbackContext.Provider>
   );
 }

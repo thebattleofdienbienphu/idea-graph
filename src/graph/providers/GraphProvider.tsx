@@ -61,9 +61,10 @@ function GraphInnerProvider({ children }: InnerProviderProps) {
             prevNode.position.y !== newNode.position.y;
           const selectedChanged = prevNode.selected !== newNode.selected;
           const labelChanged = prevNode.data?.label !== newNode.data?.label;
+          const contentChanged = prevNode.data?.content !== newNode.data?.content;
           const typeChanged = prevNode.type !== newNode.type;
 
-          if (!positionChanged && !selectedChanged && !labelChanged && !typeChanged) {
+          if (!positionChanged && !selectedChanged && !labelChanged && !contentChanged && !typeChanged) {
             return prevNode;
           }
 

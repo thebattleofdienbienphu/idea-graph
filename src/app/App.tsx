@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Workspace, Node as DomainNodeItem } from '../domain';
-import { CommandManager, CreateNodeCommand, MoveNodeCommand, CreateEdgeCommand, DeleteNodeCommand, DeleteEdgeCommand } from '../application/commands';
+import { CommandManager, CreateNodeCommand, MoveNodeCommand, CreateEdgeCommand, DeleteNodeCommand, DeleteEdgeCommand, UpdateNodeCommand } from '../application/commands';
 import { SelectionManager, SelectionState } from '../application/selection';
 import { GraphProvider, useGraph } from '../graph/providers/GraphProvider';
 import GraphCanvas from '../graph/components/GraphCanvas';
@@ -37,6 +37,7 @@ interface GraphControllerProps {
   onNodesDelete?: (nodeIds: string[]) => void;
   onEdgesDelete?: (edgeIds: string[]) => void;
   onSelectionChange?: (selectedNodes: string[], selectedEdges: string[]) => void;
+  onNodeUpdate?: (nodeId: string, fields: { label?: string; content?: string }) => void;
 }
 
 function GraphController({
@@ -48,6 +49,7 @@ function GraphController({
   onNodesDelete,
   onEdgesDelete,
   onSelectionChange,
+  onNodeUpdate,
 }: GraphControllerProps) {
   const { renderGraph } = useGraph();
 
@@ -63,6 +65,7 @@ function GraphController({
       onNodesDelete={onNodesDelete}
       onEdgesDelete={onEdgesDelete}
       onSelectionChange={onSelectionChange}
+      onNodeUpdate={onNodeUpdate}
     />
   );
 }
@@ -115,7 +118,10 @@ export default function App(): React.JSX.Element {
         x: typeof n.properties.x === 'number' ? n.properties.x : 0,
         y: typeof n.properties.y === 'number' ? n.properties.y : 0,
       },
-      data: { label: n.title },
+      data: { 
+        label: n.title,
+        content: n.content
+      },
       selected: selection.selectedNodes.includes(n.id),
     }));
   }, [activeBranch, selection.selectedNodes]);
@@ -222,6 +228,22 @@ export default function App(): React.JSX.Element {
     });
   };
 
+  const handleNodeUpdate = (nodeId: string, fields: { label?: string; content?: string }) => {
+    if (!activeBranch) return;
+    commandManager.execute(
+      new UpdateNodeCommand(activeBranch.id, nodeId, {
+        ...(fields.label !== undefined ? { title: fields.label } : {}),
+        ...(fields.content !== undefined ? { content: fields.content } : {}),
+      })
+    );
+  };
+
+  const selectedNode = useMemo(() => {
+    if (!activeBranch || selection.selectedNodes.length !== 1) return null;
+    const selectedId = selection.selectedNodes[0];
+    return activeBranch.nodes.find((n) => n.id === selectedId) || null;
+  }, [activeBranch, selection.selectedNodes]);
+
   return (
     <div className="app-container">
       {/* HEADER SECTION */}
@@ -245,9 +267,50 @@ export default function App(): React.JSX.Element {
               onNodesDelete={handleNodesDelete}
               onEdgesDelete={handleEdgesDelete}
               onSelectionChange={handleSelectionChange}
+              onNodeUpdate={handleNodeUpdate}
             />
           </GraphProvider>
         </main>
+
+        {/* RIGHT SIDEBAR */}
+        {selectedNode && (
+          <aside className="sidebar-right">
+            <div className="sidebar-section">
+              <h3>Edit Node</h3>
+              <div className="form-group">
+                <label htmlFor="node-title">Title</label>
+                <input
+                  id="node-title"
+                  type="text"
+                  className="form-input"
+                  value={selectedNode.title}
+                  onChange={(e) => {
+                    commandManager.execute(
+                      new UpdateNodeCommand(activeBranch!.id, selectedNode.id, {
+                        title: e.target.value,
+                      })
+                    );
+                  }}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="node-content">Content</label>
+                <textarea
+                  id="node-content"
+                  className="form-textarea"
+                  value={selectedNode.content}
+                  onChange={(e) => {
+                    commandManager.execute(
+                      new UpdateNodeCommand(activeBranch!.id, selectedNode.id, {
+                        content: e.target.value,
+                      })
+                    );
+                  }}
+                />
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
