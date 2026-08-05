@@ -29,7 +29,6 @@ export default function IdeaNode({ id, data, selected }: NodeProps) {
 
   // ---- Start editing a field ----
   const startEdit = useCallback((field: EditField, currentValue: string, e: React.MouseEvent) => {
-    // Only trigger on double-click (ondblclick fires this, so single-click is already filtered)
     e.stopPropagation();
     e.preventDefault();
     setEditField(field);
@@ -95,9 +94,6 @@ export default function IdeaNode({ id, data, selected }: NodeProps) {
     // Plain Enter inserts a newline — browser default, no override needed
   };
 
-  // Stop mousedown propagation from inputs/textareas to disable React Flow drag
-  const stopDrag = (e: React.MouseEvent) => e.stopPropagation();
-
   return (
     <div
       className={`idea-node ${isExpanded ? 'expanded' : 'collapsed'} ${selected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
@@ -107,15 +103,19 @@ export default function IdeaNode({ id, data, selected }: NodeProps) {
       {/* ── TITLE BAR ── */}
       <div className="idea-node-title">
         {editField === 'title' ? (
+          /*
+           * The `nodrag` class is the recommended React Flow mechanism to
+           * prevent the node from being dragged when the user interacts with
+           * this element. It allows native text selection and cursor movement
+           * to work normally without any stopPropagation hacks.
+           */
           <input
             ref={titleInputRef}
-            className="idea-node-inline-input"
+            className="idea-node-inline-input nodrag"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={handleTitleKeyDown}
             onBlur={commitEdit}
-            onClick={stopDrag}
-            onMouseDown={stopDrag}
           />
         ) : (
           <span
@@ -130,7 +130,7 @@ export default function IdeaNode({ id, data, selected }: NodeProps) {
         <button
           className={`idea-node-toggle ${isExpanded ? 'expanded' : 'collapsed'}`}
           onClick={handleToggle}
-          onMouseDown={stopDrag}
+          onMouseDown={(e) => e.stopPropagation()}
           tabIndex={-1}
           title={isExpanded ? 'Collapse' : 'Expand'}
           aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
@@ -142,15 +142,18 @@ export default function IdeaNode({ id, data, selected }: NodeProps) {
       {/* ── CONTENT ── */}
       {isExpanded && (
         editField === 'content' ? (
+          /*
+           * Same as above: `nodrag` tells React Flow to not initiate a drag
+           * when the user clicks or drags inside this textarea, while
+           * preserving all native text selection behavior.
+           */
           <textarea
             ref={contentTextareaRef}
-            className="idea-node-inline-textarea"
+            className="idea-node-inline-textarea nodrag"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={handleContentKeyDown}
             onBlur={commitEdit}
-            onClick={stopDrag}
-            onMouseDown={stopDrag}
           />
         ) : (
           <div
