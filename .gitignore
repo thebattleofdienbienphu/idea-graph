@@ -87,6 +87,9 @@ build/
 .env.test.local
 .env.production.local
 
+# Local runtime data / Saved Workspaces
+savedWorkSpaces/
+
 # OS files
 .DS_Store
 Thumbs.db
