@@ -5,12 +5,16 @@ import { SelectionManager, SelectionState } from '../application/selection';
 import { GraphProvider, useGraph } from '../graph/providers/GraphProvider';
 import GraphCanvas from '../graph/components/GraphCanvas';
 import { DomainNode as GraphDomainNode, DomainEdge as GraphDomainEdge } from '../graph/types/GraphTypes';
+import { LocalStorageAdapter } from '../infrastructure/localstorage/LocalStorageAdapter';
 import './App.css';
 
 // ----------------------------------------------------
-// INITIAL WORKSPACE FIXTURE (Empty graph at startup)
+// PERSISTENCE — LocalStorage adapter (singleton)
 // ----------------------------------------------------
-const initialWorkspace: Workspace = {
+const storage = new LocalStorageAdapter();
+
+/** Fallback when no saved workspace exists. */
+const emptyWorkspace: Workspace = {
   id: 'ws-1',
   name: 'Workspace 1',
   branches: [
@@ -23,6 +27,32 @@ const initialWorkspace: Workspace = {
   ],
   activeBranchId: 'branch-main',
 };
+
+/**
+ * Synchronously load the workspace from localStorage.
+ * We use the synchronous localStorage API directly here so the
+ * lazy useState initializer can run without async/await.
+ * Returns the saved workspace or the empty default.
+ */
+function loadOrDefault(): Workspace {
+  try {
+    const json = localStorage.getItem('idea-graph.workspace');
+    if (json === null) return emptyWorkspace;
+    const parsed = JSON.parse(json);
+    if (
+      typeof parsed !== 'object' ||
+      typeof parsed.id !== 'string' ||
+      typeof parsed.name !== 'string' ||
+      !Array.isArray(parsed.branches) ||
+      typeof parsed.activeBranchId !== 'string'
+    ) {
+      return emptyWorkspace;
+    }
+    return parsed as Workspace;
+  } catch {
+    return emptyWorkspace;
+  }
+}
 
 // ----------------------------------------------------
 // GRAPH CONTROLLER SUB-COMPONENT
@@ -75,7 +105,9 @@ function GraphController({
 // ----------------------------------------------------
 export default function App(): React.JSX.Element {
   // 1. Core State
-  const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
+  // Lazy initializer runs once before the first render — loads from localStorage
+  // without causing a flash of empty state.
+  const [workspace, setWorkspace] = useState<Workspace>(loadOrDefault);
   const [selection, setSelection] = useState<SelectionState>({
     selectedNodes: [],
     selectedEdges: [],
@@ -102,6 +134,13 @@ export default function App(): React.JSX.Element {
       commandManager.resetWorkspace(workspace);
     }
   }, [workspace, commandManager]);
+
+  // Auto-save: persist the workspace to localStorage on every change.
+  // storage.saveWorkspace is async but we do not need to await it here —
+  // localStorage writes are effectively synchronous and non-blocking.
+  useEffect(() => {
+    storage.saveWorkspace(workspace);
+  }, [workspace]);
 
   // 4. Application Query Engine Setup for current active branch
   const activeBranch = useMemo(() => {
@@ -238,6 +277,145 @@ export default function App(): React.JSX.Element {
     );
   };
 
+  const handleSaveWorkspace = async () => {
+    try {
+      const exportData = {
+        format: 'idea-graph',
+        version: 1,
+        workspace,
+      };
+      const jsonContent = JSON.stringify(exportData, null, 2);
+
+      const anyWindow = window as any;
+      if (anyWindow.showSaveFilePicker) {
+        try {
+          const handle = await anyWindow.showSaveFilePicker({
+            suggestedName: `${workspace.name.toLowerCase().replace(/\s+/g, '_')}.ideagraph`,
+            types: [
+              {
+                description: 'Idea Graph Files (*.ideagraph)',
+                accept: {
+                  'application/json': ['.ideagraph'],
+                },
+              },
+            ],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(jsonContent);
+          await writable.close();
+          return;
+        } catch (err: any) {
+          if (err.name === 'AbortError') return;
+          throw err;
+        }
+      }
+
+      // Fallback for browsers without File System Access API
+      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${workspace.name.toLowerCase().replace(/\s+/g, '_')}.ideagraph`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Failed to save workspace file: ${err.message}`);
+    }
+  };
+
+  const handleLoadWorkspace = async () => {
+    try {
+      const anyWindow = window as any;
+      let textContent: string = '';
+
+      if (anyWindow.showOpenFilePicker) {
+        try {
+          const [handle] = await anyWindow.showOpenFilePicker({
+            types: [
+              {
+                description: 'Idea Graph Files (*.ideagraph)',
+                accept: {
+                  'application/json': ['.ideagraph'],
+                },
+              },
+            ],
+          });
+          const file = await handle.getFile();
+          textContent = await file.text();
+        } catch (err: any) {
+          if (err.name === 'AbortError') return;
+          throw err;
+        }
+      } else {
+        // Fallback for browsers without File System Access API
+        textContent = await new Promise<string>((resolve, reject) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.ideagraph';
+          input.onchange = async (e: any) => {
+            const file = e.target.files?.[0];
+            if (!file) {
+              reject(new Error('No file selected'));
+              return;
+            }
+            try {
+              const text = await file.text();
+              resolve(text);
+            } catch (err) {
+              reject(err);
+            }
+          };
+          input.click();
+        });
+      }
+
+      const parsed = JSON.parse(textContent);
+      if (typeof parsed !== 'object' || parsed === null) {
+        throw new Error('File root must be a valid JSON object.');
+      }
+      if (parsed.format !== 'idea-graph') {
+        throw new Error(`Unsupported format identifier: expected 'idea-graph' but got '${parsed.format || 'none'}'.`);
+      }
+      if (parsed.version !== 1) {
+        throw new Error(`Unsupported format version: only version 1 is supported, but the file is version ${parsed.version}.`);
+      }
+
+      const ws = parsed.workspace;
+      if (
+        typeof ws !== 'object' ||
+        ws === null ||
+        typeof ws.id !== 'string' ||
+        typeof ws.name !== 'string' ||
+        !Array.isArray(ws.branches) ||
+        typeof ws.activeBranchId !== 'string'
+      ) {
+        throw new Error('Invalid workspace data structure inside the file.');
+      }
+
+      // Check branches structure
+      for (const branch of ws.branches) {
+        if (
+          typeof branch !== 'object' ||
+          branch === null ||
+          typeof branch.id !== 'string' ||
+          typeof branch.name !== 'string' ||
+          !Array.isArray(branch.nodes) ||
+          !Array.isArray(branch.edges)
+        ) {
+          throw new Error('Corrupted branch data inside the workspace.');
+        }
+      }
+
+      // Replace workspace
+      commandManager.resetWorkspace(ws);
+      selectionManager.clear();
+    } catch (err: any) {
+      alert(`Failed to load workspace file:\n${err.message}`);
+    }
+  };
+
   const selectedNode = useMemo(() => {
     if (!activeBranch || selection.selectedNodes.length !== 1) return null;
     const selectedId = selection.selectedNodes[0];
@@ -246,16 +424,26 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="app-container">
-      {/* HEADER SECTION */}
-      <header className="app-header">
-        <div className="app-logo">
-          <h1>idea-graph</h1>
-          <span>blender node style</span>
+      {/* FLOATING TITLE */}
+      <div className="app-title-floating">idea-graph</div>
+
+      {/* FLOATING WORKSPACE MENU */}
+      <div className="workspace-menu">
+        <div className="workspace-menu-content">
+          <button className="btn-secondary menu-item" onClick={handleSaveWorkspace}>
+            Save Workspace
+          </button>
+          <button className="btn-secondary menu-item" onClick={handleLoadWorkspace}>
+            Load Workspace
+          </button>
         </div>
-      </header>
+        <button className="workspace-menu-trigger btn-primary">
+          Workspace
+        </button>
+      </div>
 
       {/* MINIMAL CANVAS LAYOUT */}
-      <div className="main-layout" style={{ height: 'calc(100vh - 60px)' }}>
+      <div className="main-layout" style={{ height: '100vh' }}>
         <main className="canvas-area" style={{ flex: 1 }}>
           <GraphProvider>
             <GraphController

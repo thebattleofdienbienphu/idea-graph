@@ -68,6 +68,7 @@ export default function GraphCanvas({
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          proOptions={{ hideAttribution: true }}
           onNodeClick={onNodeClick ? (_, node) => onNodeClick(node.id) : undefined}
           onEdgeClick={onEdgeClick ? (_, edge) => onEdgeClick(edge.id) : undefined}
           onPaneClick={onPaneClick}

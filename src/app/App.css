@@ -61,7 +61,7 @@ body {
 .main-layout {
   display: flex;
   flex: 1;
-  height: calc(100vh - 60px);
+  height: 100vh;
   overflow: hidden;
 }
 
@@ -449,4 +449,60 @@ body {
   background-color: #8b5cf6;
   width: 10px;
   height: 10px;
+}
+
+/* Floating overlay title */
+.app-title-floating {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 1000;
+  pointer-events: none;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  background: linear-gradient(135deg, #a78bfa 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  user-select: none;
+}
+
+/* Bottom-right floating workspace menu expanding upwards */
+.workspace-menu {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.workspace-menu-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  opacity: 0;
+  max-height: 0;
+  visibility: hidden;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, visibility 0.3s;
+}
+
+.workspace-menu-content .menu-item {
+  white-space: nowrap;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.workspace-menu:hover .workspace-menu-content {
+  opacity: 1;
+  max-height: 100px;
+  visibility: visible;
+}
+
+.workspace-menu-trigger {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
 }
